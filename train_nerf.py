@@ -25,7 +25,6 @@ from torch_utils import custom_ops
 #----------------------------------------------------------------------------
 
 def subprocess_fn(rank, c, temp_dir):
-    # comment out for pdb to work
     # dnnlib.util.Logger(file_name=os.path.join(c.run_dir, 'log.txt'), file_mode='a', should_flush=True)
 
     # Init torch.distributed.
@@ -50,7 +49,6 @@ def subprocess_fn(rank, c, temp_dir):
 #----------------------------------------------------------------------------
 
 def launch_training(c, desc, outdir, dry_run):
-    # comment out for pdb to work
     # dnnlib.util.Logger(should_flush=True)
 
     # Pick output directory.
@@ -185,6 +183,7 @@ def main(**kwargs):
     python train.py --outdir=~/training-runs --cfg=stylegan2 --data=~/datasets/ffhq-1024x1024.zip \\
         --gpus=8 --batch=32 --gamma=10 --mirror=1 --aug=noaug
     """
+    
 
     # Initialize config.
     opts = dnnlib.EasyDict(kwargs) # Command line arguments.
@@ -207,8 +206,8 @@ def main(**kwargs):
     c.num_gpus = opts.gpus
     c.batch_size = opts.batch
     c.batch_gpu = opts.batch_gpu or opts.batch // opts.gpus
-    c.G_kwargs.channel_base = c.D_kwargs.channel_base = opts.cbase
-    c.G_kwargs.channel_max = c.D_kwargs.channel_max = opts.cmax
+    c.D_kwargs.channel_base = opts.cbase
+    c.D_kwargs.channel_max = opts.cmax
     c.G_kwargs.mapping_kwargs.num_layers = (8 if opts.cfg == 'stylegan2' else 2) if opts.map_depth is None else opts.map_depth
     c.D_kwargs.block_kwargs.freeze_layers = opts.freezed
     c.D_kwargs.epilogue_kwargs.mbstd_group_size = opts.mbstd_group
@@ -234,23 +233,32 @@ def main(**kwargs):
 
     # Base configuration.
     c.ema_kimg = c.batch_size * 10 / 32
-    if opts.cfg == 'stylegan2':
-        c.G_kwargs.class_name = 'training.networks_stylegan2.Generator'
-        c.loss_kwargs.style_mixing_prob = 0.9 # Enable style mixing regularization.
-        c.loss_kwargs.pl_weight = 2 # Enable path length regularization.
-        c.G_reg_interval = 4 # Enable lazy regularization for G.
-        c.G_kwargs.fused_modconv_default = 'inference_only' # Speed up training by using regular convolutions instead of grouped convolutions.
-        c.loss_kwargs.pl_no_weight_grad = True # Speed up path length regularization by skipping gradient computation wrt. conv2d weights.
-    else:
-        c.G_kwargs.class_name = 'training.networks_stylegan3.Generator'
-        c.G_kwargs.magnitude_ema_beta = 0.5 ** (c.batch_size / (20 * 1e3))
-        if opts.cfg == 'stylegan3-r':
-            c.G_kwargs.conv_kernel = 1 # Use 1x1 convolutions.
-            c.G_kwargs.channel_base *= 2 # Double the number of feature maps.
-            c.G_kwargs.channel_max *= 2
-            c.G_kwargs.use_radial_filters = True # Use radially symmetric downsampling filters.
-            c.loss_kwargs.blur_init_sigma = 10 # Blur the images seen by the discriminator.
-            c.loss_kwargs.blur_fade_kimg = c.batch_size * 200 / 32 # Fade out the blur during the first N kimg.
+
+    c.G_kwargs.class_name = 'nerf.Generator'
+    c.G_kwargs.magnitude_ema_beta = 0.5 ** (c.batch_size / (20 * 1e3))
+
+
+    #nerf configs
+    c.G_kwargs.cascade_level = 2
+    c.G_kwargs.cascade_samples = '64,64'
+    #convnet configs
+    c.G_kwargs.w_dim = 512
+    c.G_kwargs.fg_netdepth = 4
+    c.G_kwargs.bg_netdepth = 2
+    c.G_kwargs.upsampling_netdepth = 8
+    c.G_kwargs.n_styled_conv_layers = 15  # fg_netdepth + bg_netdepth + upsampling_netdepth + 1  (toRGB),
+    c.G_kwargs.conv_out_channels = 256
+    c.G_kwargs.up_out_channels = 128
+    c.G_kwargs.use_viewdirs = False       # not used
+
+    # embedder configs
+    c.G_kwargs.max_freq_log2 = 10
+    c.G_kwargs.max_freq_log2_viewdirs = 4
+
+    # ray sampler configs
+    c.G_kwargs.plane_H = 16
+    c.G_kwargs.plane_W = 16
+    c.G_kwargs.N_rand =1024 # not used, N_rand should be H*W all pixel positions
 
     # Augmentation.
     if opts.aug != 'noaug':
