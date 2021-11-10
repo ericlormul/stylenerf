@@ -21,6 +21,7 @@ from training import training_loop
 from metrics import metric_main
 from torch_utils import training_stats
 from torch_utils import custom_ops
+import math
 
 #----------------------------------------------------------------------------
 
@@ -192,7 +193,7 @@ def main(**kwargs):
     c.D_kwargs = dnnlib.EasyDict(class_name='training.networks_stylegan2.Discriminator', block_kwargs=dnnlib.EasyDict(), mapping_kwargs=dnnlib.EasyDict(), epilogue_kwargs=dnnlib.EasyDict())
     c.G_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0.99], eps=1e-8)
     c.D_opt_kwargs = dnnlib.EasyDict(class_name='torch.optim.Adam', betas=[0,0.99], eps=1e-8)
-    c.loss_kwargs = dnnlib.EasyDict(class_name='loss')
+    c.loss_kwargs = dnnlib.EasyDict(class_name='loss.StyleGAN2Loss')
     c.data_loader_kwargs = dnnlib.EasyDict(pin_memory=True, prefetch_factor=2)
 
     # Training set.
@@ -238,6 +239,11 @@ def main(**kwargs):
     c.G_kwargs.magnitude_ema_beta = 0.5 ** (c.batch_size / (20 * 1e3))
 
 
+    # ray sampler configs
+    c.G_kwargs.plane_H = 32
+    c.G_kwargs.plane_W = 32
+    c.G_kwargs.N_rand =1024 # not used, N_rand should be H*W all pixel positions
+
     #nerf configs
     c.G_kwargs.cascade_level = 2
     c.G_kwargs.cascade_samples = '64,64'
@@ -245,7 +251,7 @@ def main(**kwargs):
     c.G_kwargs.w_dim = 512
     c.G_kwargs.fg_netdepth = 4
     c.G_kwargs.bg_netdepth = 2
-    c.G_kwargs.upsampling_netdepth = 8
+    c.G_kwargs.upsampling_netdepth = int(math.log2(256 / c.G_kwargs.plane_H ) * 2)
     c.G_kwargs.n_styled_conv_layers = 15  # fg_netdepth + bg_netdepth + upsampling_netdepth + 1  (toRGB),
     c.G_kwargs.conv_out_channels = 256
     c.G_kwargs.up_out_channels = 128
@@ -255,10 +261,7 @@ def main(**kwargs):
     c.G_kwargs.max_freq_log2 = 10
     c.G_kwargs.max_freq_log2_viewdirs = 4
 
-    # ray sampler configs
-    c.G_kwargs.plane_H = 16
-    c.G_kwargs.plane_W = 16
-    c.G_kwargs.N_rand =1024 # not used, N_rand should be H*W all pixel positions
+
 
     # Augmentation.
     if opts.aug != 'noaug':

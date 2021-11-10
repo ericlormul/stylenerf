@@ -21,7 +21,7 @@ def get_rays_single_image(H, W, intrinsics, c2w):
     v = v.reshape(-1).astype(dtype=np.float32) + 0.5
     pixels = np.stack((u, v, np.ones_like(u)), axis=0)  # (3, H*W)
 
-    rays_d = np.dot(np.linalg.inv(intrinsics[:3, :3]), pixels)
+    rays_d = np.dot(np.linalg.inv(intrinsics[:3, :3]), pixels) # similar to dirs = torch.stack([(i-K[0][2])/K[0][0], -(j-K[1][2])/K[1][1], -torch.ones_like(i)], -1), axes directions may not the same
     rays_d = np.dot(c2w[:3, :3], rays_d)  # (3, H*W)
     rays_d = rays_d.transpose((1, 0))  # (H*W, 3)
 

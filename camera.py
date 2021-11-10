@@ -3,7 +3,7 @@ import torch
 from scipy.spatial.transform import Rotation as Rot
 
 
-def get_camera_mat(fov=49.13, res =(64,64), invert=True):
+def get_camera_mat(fov=49.13, res =(64,64), invert=False):
     # fov = 2 * arctan( sensor / (2 * focal))
     # focal = (sensor / 2)  * 1 / (tan(0.5 * fov))
     # in our case, sensor = 2 as pixels are in [-1, 1]

@@ -537,6 +537,7 @@ class SynthesisNetwork(nn.Module):
             c2w=pose.reshape(4,4))        
         # randomly sample rays and move to device
         ray_batch = img_raysampler.random_sample(self.N_rand, center_crop=False)
+        import pdb; pdb.set_trace()
         for key in ray_batch:
             if torch.is_tensor(ray_batch[key]):
                 ray_batch[key] = ray_batch[key].unsqueeze(0).expand((batch_size,) + ray_batch[key].shape).to(device)
