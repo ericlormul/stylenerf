@@ -105,7 +105,7 @@ def look_at(eye, at=np.array([0, 0, 0]), up=np.array([0, 0, 1]), eps=1e-5,
     up = up.repeat(eye.shape[0] // up.shape[0], axis=0)
     eps = np.array([eps]).reshape(1, 1).repeat(up.shape[0], axis=0)
 
-    z_axis = eye - at
+    z_axis = -(eye - at) # to match nerfplusplus visualize cameras, cameras look at the center of a unit sphere
     z_axis /= np.max(np.stack([np.linalg.norm(z_axis,
                                               axis=1, keepdims=True), eps]))
 
