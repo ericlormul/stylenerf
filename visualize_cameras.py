@@ -7,9 +7,11 @@ if __name__ == "__main__":
     camera_intrinsic = get_camera_mat(fov=10, res=(W, H))
 
     range_u, range_v = [0, 0], [0.4167, 0.5]
-    # range_u, range_v = [0, 0], [0., 0.1]
+    # range_u, range_v = [0, 0.5], [0., 0.1]
     range_radius = [1., 1.]
-    poses = get_random_pose(range_u, range_v, range_radius, batch_size=num_poses)
+
+    # range type defines whether to use range with np.random.uniform distribution (range) or np.random.choice (points).
+    poses = get_random_pose(range_u, range_v, range_radius, range_u_type='points', range_v_type='range', batch_size=num_poses)
     
 
     cam_dict = {}

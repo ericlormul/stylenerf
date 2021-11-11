@@ -21,9 +21,9 @@ def get_camera_mat(fov=49.13, res =(64,64), invert=False):
     return mat
 
 
-def get_random_pose(range_u, range_v, range_radius, batch_size=32,
+def get_random_pose(range_u, range_v, range_radius, range_u_type='range', range_v_type='range', batch_size=32,
                     invert=False):
-    loc = sample_on_sphere(range_u, range_v, size=(batch_size))
+    loc = sample_on_sphere(range_u, range_v, range_u_type=range_u_type, range_v_type=range_v_type, size=(batch_size))
     radius = range_radius[0] + \
         torch.rand(batch_size) * (range_radius[1] - range_radius[0])
     loc = loc * radius.unsqueeze(-1)
@@ -85,10 +85,17 @@ def to_sphere(u, v):
     return np.stack([cx, cy, cz], axis=-1)
 
 
-def sample_on_sphere(range_u=(0, 1), range_v=(0, 1), size=(1,),
+def sample_on_sphere(range_u=(0, 1), range_v=(0, 1), size=(1,), range_u_type='range', range_v_type='range',
                      to_pytorch=True):
-    u = np.random.uniform(*range_u, size=size)
-    v = np.random.uniform(*range_v, size=size)
+    if range_u_type == 'range':
+        u = np.random.uniform(*range_u, size=size)
+    elif range_u_type == 'points':
+        u = np.random.choice(range_u, size=size)
+
+    if range_v_type == 'range':
+        v = np.random.uniform(*range_v, size=size)
+    elif range_v_type == 'points':
+        v = np.random.choice(range_v, size=size)
 
     sample = to_sphere(u, v)
     if to_pytorch:
