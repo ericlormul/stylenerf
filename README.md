@@ -12,3 +12,9 @@ The code is based on the idea of [StyleNeRF](https://arxiv.org/abs/2110.08985)
 ## Entry Point
 
 CUDA_VISIBLE_DEVICES=1 python train_nerf.py --outdir=~/training-runs --cfg=stylegan3-r --data=../data/metfaces-256x256.zip --gpus=1 --batch=32 --gamma=6.6
+
+## Visualize camera poses
+
+pip install open3d<br>
+python visualize_cameras.py
+
