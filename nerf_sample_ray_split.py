@@ -113,7 +113,7 @@ class RaySamplerSingleImage(object):
                 ret[k] = torch.from_numpy(ret[k])
         return ret
 
-    def random_sample(self, N_rand, center_crop=False):
+    def random_sample(self, N_rand=1024, center_crop=False):
         '''
         :param N_rand: number of rays to be casted
         :return:

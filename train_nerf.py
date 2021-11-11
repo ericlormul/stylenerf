@@ -244,9 +244,10 @@ def main(**kwargs):
     c.G_kwargs.plane_W = 32
     c.G_kwargs.N_rand =1024 # not used, N_rand should be H*W all pixel positions
 
-    #nerf configs
+    #systhesis configs
     c.G_kwargs.cascade_level = 2
     c.G_kwargs.cascade_samples = '64,64'
+    c.G_kwargs.use_single_nerf = True
     #convnet configs
     c.G_kwargs.w_dim = 512
     c.G_kwargs.fg_netdepth = 4
