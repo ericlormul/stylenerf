@@ -173,9 +173,9 @@ class Conv1x1Net(nn.Module):
         in_channels=256,         # W: number of embedder channels
         out_channels=256,       # W: number of embedder channels
         input_ch_viewdirs=3,    # input_ch_viewdirs: input channels for encodings of view directions
-        skips=[4],              # skips: skip connection in network
+        skips=[],              # skips: skip connection in network
         use_viewdirs=False,      # use_viewdirs: if True, will use the view directions as input
-        no_rgb_layers=True
+        is_bg = False
     ):
         super().__init__()
 
@@ -184,6 +184,7 @@ class Conv1x1Net(nn.Module):
         self.input_ch_viewdirs = input_ch_viewdirs
         self.use_viewdirs = use_viewdirs
         self.skips = skips
+        self.is_bg = is_bg
 
         self.base_layers = []
         dim = self.in_channel
@@ -204,21 +205,24 @@ class Conv1x1Net(nn.Module):
         self.sigma_layers = nn.Sequential(*sigma_layers)
         # self.sigma_layers.apply(weights_init)      # xavier init
 
-        self.rgb_layers = None
-        self.base_remap_layers = None
-        if not no_rgb_layers:
-            # rgb color
-            rgb_layers = []
-            base_remap_layers = [nn.Conv2d(dim, out_channels, kernel_size=1), ]
-            self.base_remap_layers = nn.Sequential(*base_remap_layers)
-            # self.base_remap_layers.apply(weights_init)
 
+        self.base_remap_layers = None
+        # remap rgb feature dimension
+        if self.is_bg:
+            out_channels = 2 * out_channels
+        base_remap_layers = [nn.Conv2d(dim, out_channels, kernel_size=1), ]
+        self.base_remap_layers = nn.Sequential(*base_remap_layers)
+
+        # using viewdir as condition for rgb feature
+        self.rgb_layers = None
+        rgb_layers = []
+        if self.use_viewdirs:
             dim = out_channels + self.input_ch_viewdirs
             for i in range(1):
                 rgb_layers.append(nn.Conv2d(dim, out_channels // 2, kernel_size=1))
                 rgb_layers.append(nn.LeakyReLU())
             self.rgb_layers = nn.Sequential(*rgb_layers)
-            # self.rgb_layers.apply(weights_init)
+
 
     def forward(self, input, ws):
         '''
@@ -236,13 +240,13 @@ class Conv1x1Net(nn.Module):
         sigma = self.sigma_layers(base)
         sigma = torch.abs(sigma)
 
-        if self.base_remap_layers is not None and self.rgb_layers is not None:
-            base_remap = self.base_remap_layers(base)
+        # rgb feature remap
+        base = self.base_remap_layers(base)
+
+        if self.rgb_layers is not None: # adding viewdir condition
             input_viewdirs = input[..., -self.input_ch_viewdirs:, :, :]
-            base = self.rgb_layers(torch.cat((base_remap, input_viewdirs), dim=1)) # view direction conditioned feature
-
-
-        ret = OrderedDict([('feature', base.permute(0,2,3,1)),
+            base = self.rgb_layers(torch.cat((base, input_viewdirs), dim=1))
+        ret = OrderedDict([('feature', base),
                            ('sigma', sigma.permute(0,2,3,1).squeeze(-1))])
         return ret
 
@@ -308,10 +312,16 @@ class NerfNet(nn.Module):
         self.bg_embedder_viewdir = Embedder(input_dim=3,
                                             max_freq_log2=args.max_freq_log2_viewdirs - 1,
                                             N_freqs=args.max_freq_log2_viewdirs)
-        self.bg_net = Conv1x1Net(w_dim=args.w_dim, D=args.bg_netdepth, out_channels=args.conv_out_channels,
+        self.bg_net = Conv1x1Net(w_dim=args.w_dim, D=args.bg_netdepth, out_channels=args.conv_out_channels // 2,
                              in_channels=self.bg_embedder_position.out_dim,
                              input_ch_viewdirs=self.bg_embedder_viewdir.out_dim,
-                             use_viewdirs=args.use_viewdirs)
+                             use_viewdirs=args.use_viewdirs,
+                             is_bg=True)
+
+        self.color_mlp = nn.Sequential(
+            nn.Conv2d(args.conv_out_channels, args.conv_out_channels*2, kernel_size=1),
+            nn.LeakyReLU()
+        )
     def forward(self, ws, ray_o, ray_d, fg_z_max, fg_z_vals, bg_z_vals):
         '''
         :param ray_o, ray_d: [..., 3]
@@ -336,6 +346,7 @@ class NerfNet(nn.Module):
                            self.fg_embedder_viewdir(fg_viewdirs)), dim=-1)
         
         fg_raw = self.fg_net(input, ws[:self.fg_netdepth])
+        fg_raw['feature'] = self.color_mlp(fg_raw['feature']).permute(0,2,3,1)
         # alpha blending
         fg_dists = fg_z_vals[..., 1:] - fg_z_vals[..., :-1]
         # account for view directions
@@ -362,6 +373,8 @@ class NerfNet(nn.Module):
         bg_dists = bg_z_vals[..., :-1] - bg_z_vals[..., 1:]
         bg_dists = torch.cat((bg_dists, HUGE_NUMBER * torch.ones_like(bg_dists[..., 0:1])), dim=-1)  # [..., N_samples]
         bg_raw = self.bg_net(input, ws[self.fg_netdepth:self.fg_netdepth+self.bg_netdepth])
+        bg_raw['feature'] = self.color_mlp(bg_raw['feature']).permute(0,2,3,1)
+
         bg_alpha = 1. - torch.exp(-bg_raw['sigma'] * bg_dists)  # [..., N_samples]
         # Eq. (3): T
         # maths show weights, and summation of weights along a ray, are always inside [0, 1]
@@ -376,7 +389,6 @@ class NerfNet(nn.Module):
         bg_f_map = bg_lambda.unsqueeze(-1) * bg_f_map
         bg_depth_map = bg_lambda * bg_depth_map
         composite_map = fg_f_map + bg_f_map
-
         ret = OrderedDict([('composite_map', composite_map),            # loss
                            ('fg_weights', fg_weights),                  # importance sampling
                            ('bg_weights', bg_weights),                  # importance sampling
@@ -490,7 +502,8 @@ class SynthesisNetwork(nn.Module):
         self.bg_netdepth = args.bg_netdepth
         # Upsampling from composite feature map (fg + bg) 
         is_up = False
-        in_channels = args.conv_out_channels // 2 # conv1x1net output halves the feature dimension
+        # in_channels = args.conv_out_channels // 2 # not used, for viewdir condiation; conv1x1net output halves the feature dimension
+        in_channels = args.conv_out_channels * 2 # start at 32x32x512, double conv_out_channels which is 256
         out_channels = args.up_out_channels
         self.upsampling_layers = []
         for i in range(args.upsampling_netdepth):
@@ -515,14 +528,13 @@ class SynthesisNetwork(nn.Module):
             )
 
         )
-
         self.upsampling_layers = nn.ModuleList(self.upsampling_layers)
 
         self.H = args.plane_H
         self.W = args.plane_W
 
         self.camera_intrinsic = get_camera_mat(fov=10)
-        self.range_u, self.range_v = [0, 0], [0.4167, 0.5] # control camera postion on a sphere
+        self.range_u, self.range_v = [0.24, 0.26], [0.5, 0.5] # control camera postion on a sphere
         self.range_radius = [1, 1]      # scales camera position with sphere radius
         self.N_rand = args.N_rand  
     def create_nerf(self, args):

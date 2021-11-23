@@ -3,7 +3,7 @@ import json
 import numpy as np
 
 
-def get_camera_frustum(img_size, K, W2C, frustum_length=0.5, color=[0., 1., 0.]):
+def get_camera_frustum(img_size, K, C2W, frustum_length=0.5, color=[0., 1., 0.]):
     W, H = img_size
     hfov = np.rad2deg(np.arctan(W / 2. / K[0, 0]) * 2.)
     vfov = np.rad2deg(np.arctan(H / 2. / K[1, 1]) * 2.)
@@ -23,7 +23,6 @@ def get_camera_frustum(img_size, K, W2C, frustum_length=0.5, color=[0., 1., 0.])
     #                            np.tile(np.array([[0., 1., 0.]]), (4, 1))))
 
     # transform view frustum from (I, 0) to (R, t)
-    C2W = np.linalg.inv(W2C)
     frustum_points = np.dot(np.hstack((frustum_points, np.ones_like(frustum_points[:, 0:1]))), C2W.T)
     frustum_points = frustum_points[:, :3] / frustum_points[:, 3:4]
 
@@ -64,10 +63,9 @@ def visualize_cameras(colored_camera_dicts, sphere_radius, camera_size=0.1, geom
         frustums = []
         for img_name in sorted(camera_dict.keys()):
             K = np.array(camera_dict[img_name]['K']).reshape((4, 4))
-            W2C = np.array(camera_dict[img_name]['W2C']).reshape((4, 4))
-            C2W = np.linalg.inv(W2C)
+            C2W = np.array(camera_dict[img_name]['C2W']).reshape((4, 4))
             img_size = camera_dict[img_name]['img_size']
-            frustums.append(get_camera_frustum(img_size, K, W2C, frustum_length=camera_size, color=color))
+            frustums.append(get_camera_frustum(img_size, K, C2W, frustum_length=camera_size, color=color))
             cnt += 1
         cameras = frustums2lineset(frustums)
         things_to_draw.append(cameras)

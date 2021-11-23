@@ -6,8 +6,8 @@ if __name__ == "__main__":
     H, W = 32,32
     camera_intrinsic = get_camera_mat(fov=10, res=(W, H))
 
-    range_u, range_v = [0, 0], [0.4167, 0.5]
-    # range_u, range_v = [0, 0.5], [0., 0.1]
+    # range_u, range_v = [0, 0], [0.4167, 0.5]
+    range_u, range_v = [0., 0.5], [0, 1e-5]
     range_radius = [1., 1.]
 
     # range type defines whether to use range with np.random.uniform distribution (range) or np.random.choice (points).

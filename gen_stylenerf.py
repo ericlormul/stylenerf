@@ -68,6 +68,25 @@ def make_transform(translate: Tuple[float,float], angle: float):
 
 #----------------------------------------------------------------------------
 
+def save_image_grid(img, fname, drange, grid_size):
+    lo, hi = drange
+    img = np.asarray(img, dtype=np.float32)
+    img = (img - lo) * (255 / (hi - lo))
+    img = np.rint(img).clip(0, 255).astype(np.uint8)
+
+    gw, gh = grid_size
+    _N, C, H, W = img.shape
+    img = img.reshape([gh, gw, C, H, W])
+    img = img.transpose(0, 3, 1, 4, 2)
+    img = img.reshape([gh * H, gw * W, C])
+
+    assert C in [1, 3]
+    if C == 1:
+        PIL.Image.fromarray(img[:, :, 0], 'L').save(fname)
+    if C == 3:
+        PIL.Image.fromarray(img, 'RGB').save(fname)
+#----------------------------------------------------------------------------
+
 @click.command()
 @click.option('--network', 'network_pkl', help='Network pickle filename', required=True)
 @click.option('--seeds', type=parse_range, help='List of random seeds (e.g., \'0,1,4-6\')', required=True)
@@ -77,7 +96,6 @@ def make_transform(translate: Tuple[float,float], angle: float):
 @click.option('--translate', help='Translate XY-coordinate (e.g. \'0.3,1\')', type=parse_vec2, default='0,0', show_default=True, metavar='VEC2')
 @click.option('--rotate', help='Rotation angle in degrees', type=float, default=0, show_default=True, metavar='ANGLE')
 @click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
-@click.option('--suffix', help='filename suffix of generated image', default="")
 def generate_images(
     network_pkl: str,
     seeds: List[int],
@@ -86,8 +104,7 @@ def generate_images(
     outdir: str,
     translate: Tuple[float,float],
     rotate: float,
-    class_idx: Optional[int],
-    suffix
+    class_idx: Optional[int]
 ):
     """Generate images using pretrained network pickle.
 
@@ -124,6 +141,7 @@ def generate_images(
     # Generate images.
     for seed_idx, seed in enumerate(seeds):
         print('Generating image for seed %d (%d/%d) ...' % (seed, seed_idx, len(seeds)))
+        # z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
         z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
 
         # Construct an inverse rotation/translation matrix and pass to the generator.  The
@@ -133,9 +151,16 @@ def generate_images(
             m = make_transform(translate, rotate)
             m = np.linalg.inv(m)
             G.synthesis.input.transform.copy_(torch.from_numpy(m))
-        img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode)
-        img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
-        PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}{ "_" + suffix  if suffix else "" }.png')
+        img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode, at_inference=True)
+        camera_locs = G.synthesis.sampled_batch_camera_loc
+        with open(os.path.join(outdir, f'seed{seed:04d}_camera_loc.txt'), 'w') as f:
+            f.write(np.array2string(camera_locs.numpy(), precision=3, separator=',',suppress_small=True))
+
+        if img.shape[0] > 1: 
+            save_image_grid(img.clip(-1,1).cpu().numpy(), os.path.join(outdir, f'seed{seed:04d}.png'), drange=[-1,1], grid_size=(4,8))        
+        else:
+            img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
+            PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}.png')
 
 
 #----------------------------------------------------------------------------

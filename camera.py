@@ -34,7 +34,7 @@ def get_random_pose(range_u, range_v, range_radius, range_u_type='range', range_
 
     if invert:
         RT = torch.inverse(RT)
-    return RT
+    return RT, loc
 
 
 def get_middle_pose(range_u, range_v, range_radius, batch_size=32,
@@ -91,13 +91,18 @@ def sample_on_sphere(range_u=(0, 1), range_v=(0, 1), size=(1,), range_u_type='ra
         u = np.random.uniform(*range_u, size=size)
     elif range_u_type == 'points':
         u = np.random.choice(range_u, size=size)
+    elif range_v_type == 'linespace':
+        u = np.linspace(*range_u, num=size)        
+
 
     if range_v_type == 'range':
         v = np.random.uniform(*range_v, size=size)
     elif range_v_type == 'points':
         v = np.random.choice(range_v, size=size)
-
+    elif range_v_type == 'linespace':
+        v = np.linspace(*range_v, num=size)        
     sample = to_sphere(u, v)
+    sample = sample[sample[:,0].argsort()] # order camera locations from one direction to another
     if to_pytorch:
         sample = torch.tensor(sample).float()
 

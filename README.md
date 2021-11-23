@@ -5,7 +5,7 @@ The code is based on the idea of [StyleNeRF](https://arxiv.org/abs/2110.08985)
 ## Code Structure
 - Model configs: train_nerf.py
 - Generator: nerf.py
-- StyleNeRF implementation: nerf_networks.py
+- StyleNeRF implementation: <del>nerf_networks.py</del> networks_stylenerf.py
 - Camera: camera.py
 - Ray generation: nerf_sample_ray_split.py
 
