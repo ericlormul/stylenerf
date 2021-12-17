@@ -91,7 +91,7 @@ def sample_on_sphere(range_u=(0, 1), range_v=(0, 1), size=(1,), range_u_type='ra
         u = np.random.uniform(*range_u, size=size)
     elif range_u_type == 'points':
         u = np.random.choice(range_u, size=size)
-    elif range_v_type == 'linespace':
+    elif range_u_type == 'linespace':
         u = np.linspace(*range_u, num=size)        
 
 

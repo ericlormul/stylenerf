@@ -52,7 +52,7 @@ def modulated_conv2d(
     if x.dtype == torch.float16 and demodulate:
         weight = weight * (1 / np.sqrt(in_channels * kh * kw) / weight.norm(float('inf'), dim=[1,2,3], keepdim=True)) # max_Ikk
         styles = styles / styles.norm(float('inf'), dim=1, keepdim=True) # max_I
-
+    import pdb; pdb.set_trace()
     # Calculate per-sample weights and demodulation coefficients.
     w = None
     dcoefs = None

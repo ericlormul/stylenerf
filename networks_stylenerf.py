@@ -10,6 +10,7 @@ from nerf_sample_ray_split import RaySamplerSingleImage
 from camera import get_camera_mat, get_random_pose, get_camera_pose
 
 from collections import OrderedDict
+import random
 
 HUGE_NUMBER = 1e10
 TINY_NUMBER = 1e-6      # float32 only has 7 decimal digits precision
@@ -524,8 +525,12 @@ class StyleNeRF(nn.Module):
         self.H = plane_H
         self.W = plane_W
 
-        self.camera_intrinsic = get_camera_mat(fov=10)
-        self.range_u, self.range_v = [0., 0.5], [1e-9, 0.001] # control camera postion on a sphere, 0 for range_v will canuse singular c2w matrix which is not inversable.
+        self.camera_intrinsic = get_camera_mat(fov=10, res=(self.W, self.H))
+        # self.range_u, self.range_v = [0., 0.5], [1e-9, 0.001] # control camera postion on a sphere, 0 for range_v will canuse singular c2w matrix which is not inversable.
+        # self.range_u, self.range_v = [0., 0.], [0.4167, 0.5]
+        # self.range_u_0, self.range_v_0 = [0., 0.04], [0.5, 0.5]
+        # self.range_u_1, self.range_v_1 = [0.96, 1.], [0.5, 0.5]
+        self.range_u, self.range_v = [0., 0.083], [0.5, 0.5]
         self.range_radius = [1, 1]      # scales camera position with sphere radius
 
         # stylgan synthesis  
@@ -552,11 +557,16 @@ class StyleNeRF(nn.Module):
 
     def forward(self, ws, **kwargs):
         device = ws.device
+        range_u_type = 'range'
+        range_v_type = 'range'
         if 'at_inference' in kwargs and kwargs['at_inference'] and ws.shape[0] == 1:
             ws = ws.repeat(32, 1, 1)
+            range_u_type = 'linespace'
+            range_v_type = 'range'
         batch_size = ws.shape[0]
         # poses, loc = get_random_pose(self.range_u, self.range_v, self.range_radius, range_u_type='points', range_v_type='linespace', batch_size=batch_size)
-        poses, loc = get_random_pose(self.range_u, [0.0005, 0.001], self.range_radius, range_u_type='points', range_v_type='linespace', batch_size=batch_size)
+
+        poses, loc = get_random_pose(self.range_u, self.range_v, self.range_radius, range_u_type=range_u_type, range_v_type=range_v_type, batch_size=batch_size)
 
         self.sampled_batch_camera_loc = loc
 
