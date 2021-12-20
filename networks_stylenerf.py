@@ -9,6 +9,30 @@ from training.networks_stylegan2 import ToRGBLayer, MappingNetwork, SynthesisLay
 from nerf_sample_ray_split import RaySamplerSingleImage 
 from camera import get_camera_mat, get_random_pose, get_camera_pose
 
+# Util function for loading meshes
+from pytorch3d.io import load_obj
+
+# Data structures and functions for rendering
+from pytorch3d.structures import Meshes
+from pytorch3d.renderer import (
+    look_at_view_transform,
+    camera_position_from_spherical_angles,
+    FoVPerspectiveCameras, 
+    FoVOrthographicCameras, 
+    Materials, 
+    RasterizationSettings, 
+    MeshRenderer, 
+    MeshRasterizer,  
+    SoftPhongShader,
+    HardFlatShader,
+    TexturesVertex,
+    TexturesAtlas,
+    PointsRenderer,
+    PointsRasterizationSettings,
+    PointsRasterizer,
+    PointLights
+)
+
 from collections import OrderedDict
 import random
 
@@ -679,6 +703,73 @@ class Generator(torch.nn.Module):
         ws = self.mapping(z, c, truncation_psi=truncation_psi, truncation_cutoff=truncation_cutoff, update_emas=update_emas)
         img = self.synthesis(ws, update_emas=update_emas, **synthesis_kwargs)
         return img
+    def render_mesh(
+            self,
+            obj_path,
+            batch_size, # Set batch size - this is the number of different viewpoints from which we want to render the mesh.
+            device
+        ):
+        # Get vertices, faces, and auxiliary information:
+        verts, faces, aux = load_obj(
+            obj_path,
+            device=device
+            )        
+
+        # Initialize each vertex to be white in color.
+        verts_rgb = torch.ones_like(verts)[None]*0.7  # (1, V, 3)
+        textures = TexturesVertex(verts_features=verts_rgb.to(device))
+
+        mesh = Meshes(
+            verts=[verts],
+            faces=[faces.verts_idx],
+            textures=textures) 
+
+        # Create a batch of meshes by repeating the cow mesh and associated textures. 
+        # Meshes has a useful `extend` method which allows us do this very easily. 
+        # This also extends the textures. 
+        meshes = mesh.extend(batch_size)
+
+        # Get a batch of viewing angles. 
+        elev = torch.linspace(0, 0, batch_size)
+        azim = torch.linspace(-180, 180, batch_size)
+
+        # All the cameras helper methods support mixed type inputs and broadcasting. So we can 
+        # view the camera from the same distance and specify dist=2.7 as a float,
+        # and then specify elevation and azimuth angles for each viewpoint as tensors. 
+        R, T = look_at_view_transform(dist=0.4, elev=elev, azim=azim)
+        import pdb; pdb.set_trace()
+        cameras = FoVPerspectiveCameras(device=device, R=R, T=T, znear=0.4)
+
+        # Here we set the output image to be of size 256 x 256 based on config.json 
+        raster_settings = RasterizationSettings(
+            image_size = 256, 
+            blur_radius = 0.0, 
+            faces_per_pixel = 1, 
+        )
+
+        # Initialize rasterizer by using a MeshRasterizer class
+        rasterizer = MeshRasterizer(
+                cameras=cameras, 
+                raster_settings=raster_settings
+            )        
+
+        lights = PointLights(device=device, specular_color=[[0.2,0.2,0.2]],diffuse_color=[[0.5,0.5,0.5]], location=[[0.0, 0.0, 3.0]])
+        shader = HardFlatShader(device = device, cameras = cameras, lights=lights)
+
+        # Create a mesh renderer by composing a rasterizer and a shader
+        renderer = MeshRenderer(rasterizer, shader)            
+
+        # Move the light back in front of the cow which is facing the -z direction.
+        # lights.location = torch.tensor([[0.0, 0.0, 3.0]], device=device)
+        lights.location = camera_position_from_spherical_angles(0.7, elev, azim).to(device)
+
+        # We can pass arbitrary keyword arguments to the rasterizer/shader via the renderer
+        # so the renderer does not need to be reinitialized if any of the settings change.
+        images = renderer(meshes, cameras=cameras, lights=lights).detach()
+        images = images[..., :3]
+
+        return images, cameras
+
 
 if __name__ == "__main__":
     G = Generator(

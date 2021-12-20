@@ -236,3 +236,37 @@ class ImageFolderDataset(Dataset):
         return labels
 
 #----------------------------------------------------------------------------
+
+class MeshRenderingDataset(torch.utils.data.Dataset):
+    def __init__(self,
+        path,                   # Path to directory or zip.
+        detailed_obj    = False, # Whether use detailed objs with more triangles
+        **additional_kwargs
+    ):
+        self.path = path
+        self.detailed_obj = detailed_obj
+
+        self.obj_files = self.get_obj_fnames()
+
+        # additional options to match stylegan API
+        self.name = os.path.splitext(os.path.basename(self.path))[0]
+        self.resolution = 256
+        self.has_labels = False
+        self.image_shape = [256,256]
+        self.label_shape = np.zeros([len(self.obj_files), 0])
+        self.num_channels = 3
+        self.label_dim = 0
+    def get_obj_fnames(self):
+        obj_files = []
+        for root, dirs, files in os.walk(self.path):
+            for f in files:
+                name, ext = os.path.splitext(f)
+                if (ext == '.obj' and self.detailed_obj and 'detail' in name) or \
+                    (ext == '.obj' and not self.detailed_obj and not 'detail' in name):
+                    obj_files.append(os.path.join(root, f))
+        return obj_files
+    def __len__(self):
+        return len(self.obj_files)
+    def __getitem__(self, idx):
+        return self.obj_files[idx]
+                    
